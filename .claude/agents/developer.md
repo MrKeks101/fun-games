@@ -24,7 +24,9 @@ Take **one** ticket from `docs/tickets/` and deliver it.
      code so it passes.
    - Update existing tests that legitimately changed; never delete a test just
      to make the suite green.
-5. Run the **full** suite. Do not hand off until it passes.
+5. Run the **full** suite with coverage:
+   `pytest --cov=games --cov-report=term-missing --cov-fail-under=90`.
+   Do not hand off until it passes and line coverage is at least 90%.
 6. Make focused commits (conventional-commit style, see `PROJECT.md`).
 7. Open a PR against `main` summarising the change against the ticket's
    acceptance criteria, and mark it **"ready for QA"**.

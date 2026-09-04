@@ -33,6 +33,8 @@ roadmap live in their own docs, added when we need them.
 /                repo root
 README.md        public-facing blurb
 PROJECT.md       this file — workflow & working agreement
+pyproject.toml   pytest + coverage config
+requirements.txt runtime + test dependencies
 docs/            requirements, tickets, design notes, roadmap
   requirements/  PM's domain analysis and requirements per feature
   tickets/       PM's tickets for the dev agent
@@ -40,6 +42,22 @@ games/           one package per game (pygame apps)
 tests/           local test suite (mirrors games/)
 .claude/agents/  agent definitions (Project Manager, Developer)
 ```
+
+## Local setup
+
+```
+python -m venv .venv
+.venv\Scripts\activate            # PowerShell: .venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+Run the tests + coverage gate from the repo root:
+
+```
+pytest
+```
+
+(`pyproject.toml` wires in `--cov=games --cov-fail-under=90`.)
 
 ## Tech stack
 
@@ -145,7 +163,11 @@ Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `ci`.
 
 ## Testing
 
-- **Local only for now.** `pytest` run from the repo root.
+- **Local only for now.** `pytest` run from the repo root, coverage via
+  `pytest-cov`.
+- **Coverage target: 90% line coverage** across the project. A change that
+  drops coverage below 90% is not ready for QA. Measured with
+  `pytest --cov=games --cov-report=term-missing --cov-fail-under=90`.
 - New logic ships with tests. Game rules and AI move selection especially —
   cheap to test, expensive to get wrong.
 - The dev agent creates or updates tests on every change; a bug fix starts
@@ -181,5 +203,6 @@ A running log of choices that outlive a single session. Newest first.
 | 2026-09-04 | Two-agent workflow: PM writes tickets, Dev implements | Practice requirements → tickets → dev handoff |
 | 2026-09-04 | Luiz is Stakeholder + QA; only Luiz approves a feature | Human owns priorities and final sign-off |
 | 2026-09-04 | Local `pytest` only; CI/CD deferred to first web port | No web infra needed yet |
+| 2026-09-04 | 90% line-coverage target, enforced with `--cov-fail-under=90` | Objective, simple quality bar |
 | 2026-09-04 | Feature-branch + PR workflow, squash merge            | Build PR/review habits; keep history clean |
 | 2026-09-04 | Web stack deferred, decided per game                  | Avoid committing before we know the needs |

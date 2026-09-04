@@ -1,0 +1,6 @@
+# Runtime
+pygame==2.6.1
+
+# Testing (local only for now)
+pytest==9.1.1
+pytest-cov==7.1.0

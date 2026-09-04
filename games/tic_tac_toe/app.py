@@ -17,6 +17,11 @@ Requirement 10 ("completed rounds update the session score exactly once") is
 this module's job: :class:`AppState` carries a ``recorded`` latch so the outcome
 is handed to the :class:`~games.tic_tac_toe.score.ScoreBoard` on the single
 frame the round becomes terminal and never again.
+
+Requirement 8 ("start a new round at any time") is handled by
+:func:`start_new_round`: the on-screen "new round" button and the ``N`` /
+``Space`` keys both clear the board and result while leaving the session score
+alone, so abandoning a round in progress never touches the tally.
 """
 
 from __future__ import annotations
@@ -35,6 +40,7 @@ __all__ = [
     "handle_event",
     "process_events",
     "apply_click",
+    "start_new_round",
     "draw_frame",
     "run",
 ]
@@ -45,6 +51,8 @@ CAPTION = "Tic-tac-toe"
 FPS = 60
 #: The mouse button that places a mark.
 LEFT_BUTTON = 1
+#: Keys that start a fresh round (see requirements open question 3).
+NEW_ROUND_KEYS = frozenset({pygame.K_n, pygame.K_SPACE})
 
 
 @dataclass
@@ -96,19 +104,40 @@ def apply_click(state: AppState, point: tuple[float, float]) -> AppState:
     return state
 
 
+def start_new_round(state: AppState) -> AppState:
+    """Clear the board and result for a fresh round, keeping the session score.
+
+    ``X`` moves first again (requirement 9). The :class:`ScoreBoard` is left
+    untouched, so starting a new round mid-play abandons the current one without
+    recording anything. ``recorded`` is re-armed so the next finished round is
+    counted once.
+    """
+    state.round_.new_round()
+    state.recorded = False
+    return state
+
+
 def handle_event(state: AppState, event: "pygame.event.Event") -> AppState:
     """Apply a single ``pygame`` event to ``state``.
 
     * ``QUIT`` or the ``Esc`` key clears ``state.running`` so the loop stops.
-    * A left-click is routed through :func:`apply_click`.
+    * ``N`` / ``Space`` start a fresh round via :func:`start_new_round`.
+    * A left-click on the "new round" button starts a fresh round; any other
+      left-click is routed through :func:`apply_click`.
     * Everything else is ignored.
     """
     if event.type == pygame.QUIT:
         state.running = False
-    elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-        state.running = False
+    elif event.type == pygame.KEYDOWN:
+        if event.key == pygame.K_ESCAPE:
+            state.running = False
+        elif event.key in NEW_ROUND_KEYS:
+            start_new_round(state)
     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == LEFT_BUTTON:
-        apply_click(state, event.pos)
+        if state.layout.point_in_new_round_button(event.pos):
+            start_new_round(state)
+        else:
+            apply_click(state, event.pos)
     return state
 
 
@@ -126,7 +155,7 @@ def draw_frame(surface: "pygame.Surface", state: AppState) -> None:
 
 
 def run(layout: BoardLayout = DEFAULT_LAYOUT) -> None:  # pragma: no cover - real display loop
-    """Open the window and play one hot-seat round until the player quits.
+    """Open the window and play a hot-seat session until the player quits.
 
     The loop is intentionally trivial: pump events through
     :func:`process_events`, redraw via :func:`draw_frame`, flip, tick the clock.

@@ -11,12 +11,18 @@ import pygame
 import pytest
 
 from games.tic_tac_toe import app
-from games.tic_tac_toe.app import AppState, apply_click, handle_event
+from games.tic_tac_toe.app import (
+    AppState,
+    apply_click,
+    handle_event,
+    start_new_round,
+)
 from games.tic_tac_toe.game import Mark, Status
 from games.tic_tac_toe.layout import DEFAULT_LAYOUT
 
 # Click sequences expressed as cell indices.
 X_WIN_MOVES = [0, 3, 1, 4, 2]  # X takes the top row
+O_WIN_MOVES = [0, 3, 1, 4, 8, 5]  # O takes the middle row
 DRAW_MOVES = [0, 1, 2, 4, 3, 5, 7, 6, 8]  # cat's game, X moves last
 
 
@@ -27,6 +33,18 @@ def _click_event(index: int) -> pygame.event.Event:
     pos = DEFAULT_LAYOUT.cell_center(index)
     return pygame.event.Event(
         pygame.MOUSEBUTTONDOWN, {"button": app.LEFT_BUTTON, "pos": pos}
+    )
+
+
+def _key_event(key: int) -> pygame.event.Event:
+    return pygame.event.Event(pygame.KEYDOWN, {"key": key})
+
+
+def _new_round_button_event() -> pygame.event.Event:
+    bx, by, bw, bh = DEFAULT_LAYOUT.new_round_rect
+    return pygame.event.Event(
+        pygame.MOUSEBUTTONDOWN,
+        {"button": app.LEFT_BUTTON, "pos": (bx + bw // 2, by + bh // 2)},
     )
 
 
@@ -137,6 +155,111 @@ def test_apply_click_returns_state_unchanged_once_over(state):
     result = apply_click(state, DEFAULT_LAYOUT.cell_center(8))
     assert result is state
     assert state.round_.board == board_before
+
+
+# -- new round / multi-round session --------------------------------
+
+
+def test_start_new_round_clears_board_keeps_score(state):
+    _play(state, X_WIN_MOVES)
+    assert state.scoreboard.x_wins == 1
+
+    start_new_round(state)
+
+    assert state.round_.board == (None,) * 9
+    assert state.round_.current_mark is Mark.X
+    assert state.round_.status is Status.IN_PROGRESS
+    assert state.round_.winning_line is None
+    assert state.recorded is False
+    assert (state.scoreboard.x_wins, state.scoreboard.o_wins,
+            state.scoreboard.draws) == (1, 0, 0)
+
+
+def test_n_key_starts_a_fresh_round_and_preserves_score(state):
+    _play(state, X_WIN_MOVES)
+    handle_event(state, _key_event(pygame.K_n))
+
+    assert state.round_.board == (None,) * 9
+    assert state.round_.current_mark is Mark.X
+    assert state.scoreboard.x_wins == 1
+    assert state.recorded is False
+
+
+def test_space_key_starts_a_fresh_round(state):
+    _play(state, [0, 1, 2])
+    handle_event(state, _key_event(pygame.K_SPACE))
+
+    assert state.round_.board == (None,) * 9
+    assert state.round_.current_mark is Mark.X
+
+
+def test_new_round_button_click_starts_a_fresh_round(state):
+    _play(state, DRAW_MOVES)
+    assert state.scoreboard.draws == 1
+
+    handle_event(state, _new_round_button_event())
+
+    assert state.round_.board == (None,) * 9
+    assert state.round_.current_mark is Mark.X
+    assert state.scoreboard.draws == 1
+    assert state.recorded is False
+
+
+def test_new_round_mid_play_records_nothing(state):
+    _play(state, [0, 4, 1])  # round in progress, X ahead but not won
+    handle_event(state, _key_event(pygame.K_n))
+
+    assert state.scoreboard.rounds_played == 0
+    assert state.round_.board == (None,) * 9
+    assert state.round_.current_mark is Mark.X
+
+
+def test_new_round_button_mid_play_records_nothing(state):
+    _play(state, [0, 4, 1])
+    handle_event(state, _new_round_button_event())
+
+    assert state.scoreboard.rounds_played == 0
+    assert state.round_.board == (None,) * 9
+
+
+def test_three_rounds_accumulate_the_expected_score(state):
+    _play(state, X_WIN_MOVES)
+    handle_event(state, _key_event(pygame.K_n))
+    _play(state, O_WIN_MOVES)
+    handle_event(state, _new_round_button_event())
+    _play(state, DRAW_MOVES)
+
+    assert state.round_.status is Status.DRAW  # the last of the three rounds
+    assert (state.scoreboard.x_wins, state.scoreboard.o_wins,
+            state.scoreboard.draws) == (1, 1, 1)
+    assert state.scoreboard.rounds_played == 3
+
+
+def test_each_finished_round_moves_exactly_one_counter_by_one(state):
+    before = (state.scoreboard.x_wins, state.scoreboard.o_wins,
+              state.scoreboard.draws)
+    _play(state, O_WIN_MOVES)
+    after = (state.scoreboard.x_wins, state.scoreboard.o_wins,
+             state.scoreboard.draws)
+    deltas = [b - a for a, b in zip(before, after)]
+    assert sorted(deltas) == [0, 0, 1]
+
+
+def test_new_round_after_win_lets_play_resume(state):
+    _play(state, X_WIN_MOVES)
+    handle_event(state, _key_event(pygame.K_n))
+    handle_event(state, _click_event(4))
+    assert state.round_.board[4] is Mark.X
+    assert state.round_.current_mark is Mark.O
+
+
+def test_relaunch_starts_from_a_zeroed_scoreboard(state):
+    _play(state, X_WIN_MOVES)
+    assert state.scoreboard.rounds_played == 1
+
+    fresh = AppState.new()
+    assert (fresh.scoreboard.x_wins, fresh.scoreboard.o_wins,
+            fresh.scoreboard.draws) == (0, 0, 0)
 
 
 # -- quit paths -------------------------------------------------------
